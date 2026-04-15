@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 
-const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000").replace(/\/$/, "");
+const defaultApiBaseUrl = import.meta.env.DEV ? "http://localhost:5000/api" : "/api";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl).replace(/\/$/, "");
 
 async function safeJson(response) {
   try {

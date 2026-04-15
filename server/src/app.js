@@ -1,0 +1,66 @@
+import cors from "cors";
+import express from "express";
+import { env } from "./config.js";
+import { generateAnalysis } from "./services/analysis-service.js";
+import { requireRequestContext } from "./services/auth-service.js";
+import { addExpense, listExpenses } from "./services/expense-service.js";
+
+const app = express();
+const api = express.Router();
+const vercelAppDomainPattern = /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.vercel\.app$/i;
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || origin === env.CLIENT_ORIGIN || vercelAppDomainPattern.test(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Origin not allowed by MoneyMind AI API."));
+    },
+  })
+);
+app.use(express.json());
+
+async function withAuth(request, response, handler) {
+  try {
+    const context = await requireRequestContext(request);
+    await handler(context);
+  } catch (error) {
+    response.status(error.statusCode || 500).json({
+      error: error.message || "Something went wrong while handling your request.",
+    });
+  }
+}
+
+api.get("/health", (_request, response) => {
+  response.json({ status: "ok" });
+});
+
+api.get("/expenses", async (request, response) => {
+  await withAuth(request, response, async (context) => {
+    const expenses = await listExpenses(context);
+    response.json({ expenses });
+  });
+});
+
+api.post("/expenses", async (request, response) => {
+  await withAuth(request, response, async (context) => {
+    const expense = await addExpense(context, request.body || {});
+    response.status(201).json({ expense });
+  });
+});
+
+api.post("/analyze", async (request, response) => {
+  await withAuth(request, response, async (context) => {
+    const expenses = await listExpenses(context);
+    const result = await generateAnalysis(expenses);
+    response.json(result);
+  });
+});
+
+app.use(api);
+app.use("/api", api);
+
+export default app;
