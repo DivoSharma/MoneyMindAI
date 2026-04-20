@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { env, getMissingServerEnv } from "./config.js";
-import { generateAnalysis } from "./services/analysis-service.js";
+import { generateAnalysis, generateFinanceChatReply } from "./services/analysis-service.js";
 import { requireRequestContext } from "./services/auth-service.js";
 import { addExpense, listExpenses } from "./services/expense-service.js";
 
@@ -61,6 +61,14 @@ api.post("/analyze", async (request, response) => {
   await withAuth(request, response, async (context) => {
     const expenses = await listExpenses(context);
     const result = await generateAnalysis(expenses);
+    response.json(result);
+  });
+});
+
+api.post("/chat", async (request, response) => {
+  await withAuth(request, response, async (context) => {
+    const expenses = await listExpenses(context);
+    const result = await generateFinanceChatReply(request.body?.messages || [], expenses);
     response.json(result);
   });
 });

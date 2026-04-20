@@ -55,3 +55,10 @@ export function analyzeExpenses() {
     body: JSON.stringify({}),
   });
 }
+
+export function chatWithAdvisor(messages) {
+  return request("/chat", {
+    method: "POST",
+    body: JSON.stringify({ messages }),
+  });
+}

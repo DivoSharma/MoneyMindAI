@@ -5,28 +5,39 @@ import AuthPanel from "./components/AuthPanel";
 import Dashboard from "./components/Dashboard";
 import ExpenseForm from "./components/ExpenseForm";
 import ExpenseList from "./components/ExpenseList";
-import { analyzeExpenses, getExpenses } from "./lib/api";
+import { analyzeExpenses, chatWithAdvisor, getExpenses } from "./lib/api";
 import { supabase } from "./lib/supabase";
 
+function createMessage(role, content) {
+  return {
+    id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    role,
+    content,
+  };
+}
+
 function DashboardPage({
-  analysis,
-  analysisSource,
+  aiSource,
+  chatMessages,
   expenses,
   isAnalyzing,
   isLoading,
   listError,
   onAnalyze,
   onRefresh,
+  onSendMessage,
 }) {
   return (
     <div className="page-grid">
       <div className="page-main">
         <Dashboard expenses={expenses} onRefresh={onRefresh} />
         <AIInsights
-          analysis={analysis}
+          hasExpenses={expenses.length > 0}
           isAnalyzing={isAnalyzing}
+          messages={chatMessages}
           onAnalyze={onAnalyze}
-          source={analysisSource}
+          onSendMessage={onSendMessage}
+          source={aiSource}
         />
       </div>
       <div className="page-sidebar">
@@ -90,8 +101,8 @@ export default function App() {
   const [expenses, setExpenses] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [listError, setListError] = useState("");
-  const [analysis, setAnalysis] = useState("");
-  const [analysisSource, setAnalysisSource] = useState("");
+  const [chatMessages, setChatMessages] = useState([]);
+  const [aiSource, setAiSource] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
@@ -122,8 +133,8 @@ export default function App() {
 
       setSession(nextSession);
       setUserEmail(nextSession?.user?.email || "");
-      setAnalysis("");
-      setAnalysisSource("");
+      setChatMessages([]);
+      setAiSource("");
       setListError("");
 
       if (!nextSession) {
@@ -161,8 +172,13 @@ export default function App() {
 
   async function handleAnalyze() {
     if (expenses.length === 0) {
-      setAnalysis("Add a few expenses first so MoneyMind AI has enough context to analyze.");
-      setAnalysisSource("fallback");
+      setChatMessages([
+        createMessage(
+          "assistant",
+          "Add a few expenses first so MoneyMind AI has enough context to review your finances."
+        ),
+      ]);
+      setAiSource("fallback");
       return;
     }
 
@@ -170,11 +186,45 @@ export default function App() {
 
     try {
       const data = await analyzeExpenses();
-      setAnalysis(data.analysis || "");
-      setAnalysisSource(data.source || "");
+      setChatMessages([createMessage("assistant", data.analysis || "I reviewed your recent spending.")]);
+      setAiSource(data.source || "");
     } catch (error) {
-      setAnalysis(error.message);
-      setAnalysisSource("fallback");
+      setChatMessages([createMessage("assistant", error.message)]);
+      setAiSource("fallback");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function handleSendMessage(content) {
+    if (!content.trim()) {
+      return;
+    }
+
+    const userMessage = createMessage("user", content.trim());
+    const nextMessages = [...chatMessages, userMessage];
+    setChatMessages(nextMessages);
+    setIsAnalyzing(true);
+
+    try {
+      const data = await chatWithAdvisor(
+        nextMessages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        }))
+      );
+
+      setChatMessages([...nextMessages, createMessage("assistant", data.reply || "I'm here to help.")]);
+      setAiSource(data.source || "");
+    } catch (error) {
+      setChatMessages([
+        ...nextMessages,
+        createMessage(
+          "assistant",
+          error.message || "I ran into a problem while replying. Please try again in a moment."
+        ),
+      ]);
+      setAiSource("fallback");
     } finally {
       setIsAnalyzing(false);
     }
@@ -196,13 +246,13 @@ export default function App() {
 
   function handleExpenseCreated(expense) {
     setExpenses((current) => [expense, ...current]);
-    setAnalysis("");
-    setAnalysisSource("");
+    setChatMessages([]);
+    setAiSource("");
   }
 
   async function handleSignOut() {
-    setAnalysis("");
-    setAnalysisSource("");
+    setChatMessages([]);
+    setAiSource("");
     setExpenses([]);
     setListError("");
     await supabase.auth.signOut();
@@ -247,14 +297,15 @@ export default function App() {
         <Route
           element={
             <DashboardPage
-              analysis={analysis}
-              analysisSource={analysisSource}
+              aiSource={aiSource}
+              chatMessages={chatMessages}
               expenses={expenses}
               isAnalyzing={isAnalyzing}
               isLoading={isLoading}
               listError={listError}
               onAnalyze={handleAnalyze}
               onRefresh={handleRefresh}
+              onSendMessage={handleSendMessage}
             />
           }
           path="/"
@@ -274,3 +325,4 @@ export default function App() {
     </div>
   );
 }
+

@@ -63,6 +63,44 @@ function buildFallbackAnalysis(expenses) {
   ].join("\n");
 }
 
+function normalizeMessages(messages) {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+
+  return messages
+    .filter((message) => ["user", "assistant"].includes(message?.role))
+    .map((message) => ({
+      role: message.role,
+      content: String(message.content || "").trim(),
+    }))
+    .filter((message) => message.content)
+    .slice(-12);
+}
+
+function buildExpenseContext(expenses) {
+  return JSON.stringify(buildExpenseDigest(expenses), null, 2);
+}
+
+function buildFallbackChatReply(messages, expenses) {
+  const latestQuestion =
+    [...normalizeMessages(messages)].reverse().find((message) => message.role === "user")?.content || "";
+  const summary = buildFallbackAnalysis(expenses);
+
+  return [
+    latestQuestion
+      ? `Here is a practical answer based on your latest question: "${latestQuestion}".`
+      : "Here is a practical snapshot of your current money flow.",
+    "",
+    summary,
+    "",
+    "Ask follow-up questions like:",
+    "- How can I reduce food spending without feeling restricted?",
+    "- What SIP amount looks realistic for my current budget?",
+    "- Build me a weekly spending limit for the rest of this month.",
+  ].join("\n");
+}
+
 export async function generateAnalysis(expenses) {
   if (!Array.isArray(expenses) || expenses.length === 0) {
     return {
@@ -110,6 +148,62 @@ export async function generateAnalysis(expenses) {
   } catch {
     return {
       analysis: buildFallbackAnalysis(expenses),
+      source: "fallback",
+    };
+  }
+}
+
+export async function generateFinanceChatReply(messages, expenses) {
+  if (!Array.isArray(expenses) || expenses.length === 0) {
+    return {
+      reply:
+        "Add a few expenses first, then ask me anything about budgeting, savings, or SIP and FD planning.",
+      source: "fallback",
+    };
+  }
+
+  const normalizedMessages = normalizeMessages(messages);
+
+  if (!groqClient) {
+    return {
+      reply: buildFallbackChatReply(normalizedMessages, expenses),
+      source: "fallback",
+    };
+  }
+
+  try {
+    const completion = await groqClient.chat.completions.create({
+      model: env.GROQ_MODEL,
+      temperature: 0.4,
+      messages: [
+        {
+          role: "system",
+          content: `${advisorPrompt}\nYou are now in an interactive chat. Answer follow-up questions using the current expense context, use INR, and keep the advice concrete and concise.`,
+        },
+        {
+          role: "system",
+          content: `Current expense digest:\n${buildExpenseContext(expenses)}`,
+        },
+        ...normalizedMessages,
+      ],
+    });
+
+    const reply = completion.choices?.[0]?.message?.content?.trim();
+
+    if (!reply) {
+      return {
+        reply: buildFallbackChatReply(normalizedMessages, expenses),
+        source: "fallback",
+      };
+    }
+
+    return {
+      reply,
+      source: "groq",
+    };
+  } catch {
+    return {
+      reply: buildFallbackChatReply(normalizedMessages, expenses),
       source: "fallback",
     };
   }
