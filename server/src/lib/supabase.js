@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { env } from "../config.js";
+import { assertServerEnv, env } from "../config.js";
 
 function createOptions(accessToken) {
   return {
@@ -19,6 +19,7 @@ function createOptions(accessToken) {
 }
 
 export function createSupabaseClient(accessToken) {
+  assertServerEnv();
   return createClient(env.SUPABASE_URL, env.SUPABASE_PUBLISHABLE_KEY, createOptions(accessToken));
 }
 

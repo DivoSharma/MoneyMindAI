@@ -1,6 +1,7 @@
 {
   "name": "moneymind-ai",
   "private": true,
+  "type": "module",
   "workspaces": [
     "client",
     "server"

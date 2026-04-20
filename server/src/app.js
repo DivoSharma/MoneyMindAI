@@ -1,6 +1,6 @@
 import cors from "cors";
 import express from "express";
-import { env } from "./config.js";
+import { env, getMissingServerEnv } from "./config.js";
 import { generateAnalysis } from "./services/analysis-service.js";
 import { requireRequestContext } from "./services/auth-service.js";
 import { addExpense, listExpenses } from "./services/expense-service.js";
@@ -35,7 +35,12 @@ async function withAuth(request, response, handler) {
 }
 
 api.get("/health", (_request, response) => {
-  response.json({ status: "ok" });
+  const missingEnv = getMissingServerEnv();
+
+  response.json({
+    status: missingEnv.length === 0 ? "ok" : "degraded",
+    missingEnv,
+  });
 });
 
 api.get("/expenses", async (request, response) => {
