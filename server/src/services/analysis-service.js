@@ -1,8 +1,17 @@
 import { env } from "../config.js";
 import { groqClient } from "../lib/groq.js";
 
-const advisorPrompt =
-  "You are a personal finance advisor for a young Indian user.\nAnalyze their expenses and provide:\n1. Spending breakdown\n2. Bad habits\n3. Monthly savings potential\n4. Investment suggestions (FD, SIP)\n\nKeep it simple, actionable, and friendly.";
+const advisorPrompt = `
+You are MoneyMind AI, a personal finance strategist for a young Indian professional.
+Use the user's income, expense categories, cash-flow position, and recent transaction notes to give practical advice.
+
+When you respond:
+- Use INR amounts.
+- Keep the tone warm, polished, and professional.
+- Prioritize personalized budgeting and cash-flow guidance over generic finance lectures.
+- Give realistic savings ideas and sensible Indian options like emergency fund, FD, and SIP.
+- Avoid making up facts that are not supported by the transaction data.
+`.trim();
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-IN", {
@@ -12,54 +21,101 @@ function formatCurrency(value) {
   }).format(Number(value) || 0);
 }
 
-function buildExpenseDigest(expenses) {
-  const totalSpent = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const categoryTotals = expenses.reduce((accumulator, expense) => {
-    accumulator[expense.category] = (accumulator[expense.category] || 0) + Number(expense.amount || 0);
-    return accumulator;
-  }, {});
+function sumAmounts(items) {
+  return items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+
+function getCurrentMonthKey() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function getBreakdown(items, field) {
+  return Object.entries(
+    items.reduce((accumulator, item) => {
+      const key = String(item[field] || "Other").trim() || "Other";
+      accumulator[key] = (accumulator[key] || 0) + Number(item.amount || 0);
+      return accumulator;
+    }, {})
+  )
+    .map(([label, total]) => ({ label, total }))
+    .sort((left, right) => right.total - left.total);
+}
+
+function buildFinanceDigest(expenses, incomes) {
+  const currentMonthKey = getCurrentMonthKey();
+  const totalSpent = sumAmounts(expenses);
+  const totalIncome = sumAmounts(incomes);
+  const monthlyExpenses = expenses.filter((expense) => String(expense.date).startsWith(currentMonthKey));
+  const monthlyIncomes = incomes.filter((income) => String(income.date).startsWith(currentMonthKey));
+  const monthlySpend = sumAmounts(monthlyExpenses);
+  const monthlyIncome = sumAmounts(monthlyIncomes);
+  const netWorthFlow = totalIncome - totalSpent;
+  const monthlyNet = monthlyIncome - monthlySpend;
+  const savingsRate = monthlyIncome > 0 ? Math.round((monthlyNet / monthlyIncome) * 100) : 0;
+  const expenseBreakdown = getBreakdown(expenses, "category");
+  const incomeBreakdown = getBreakdown(incomes, "source");
 
   return {
     totalSpent,
-    transactions: expenses.length,
-    categoryTotals,
+    totalIncome,
+    netWorthFlow,
+    monthlyIncome,
+    monthlySpend,
+    monthlyNet,
+    savingsRate,
+    expenseBreakdown,
+    incomeBreakdown,
+    transactions: {
+      expenseCount: expenses.length,
+      incomeCount: incomes.length,
+    },
     expenses: expenses.map((expense) => ({
       amount: Number(expense.amount || 0),
       category: expense.category,
       date: expense.date,
       note: expense.note || "",
     })),
+    incomes: incomes.map((income) => ({
+      amount: Number(income.amount || 0),
+      source: income.source,
+      date: income.date,
+      note: income.note || "",
+    })),
   };
 }
 
-function buildFallbackAnalysis(expenses) {
-  const digest = buildExpenseDigest(expenses);
-  const categoryEntries = Object.entries(digest.categoryTotals).sort((left, right) => right[1] - left[1]);
-  const topCategory = categoryEntries[0];
-  const discretionarySpend = categoryEntries
-    .filter(([category]) => ["Food", "Shopping", "Entertainment", "Travel"].includes(category))
-    .reduce((sum, [, total]) => sum + total, 0);
-  const savingsPotential = discretionarySpend * 0.2;
+function buildFallbackAnalysis(expenses, incomes) {
+  const digest = buildFinanceDigest(expenses, incomes);
+  const topExpense = digest.expenseBreakdown[0];
+  const topIncome = digest.incomeBreakdown[0];
+  const flexibleSpend = digest.expenseBreakdown
+    .filter((item) => ["Food", "Shopping", "Entertainment", "Travel"].includes(item.label))
+    .reduce((sum, item) => sum + item.total, 0);
+  const suggestedCut = flexibleSpend * 0.15;
+  const sipSuggestion = digest.monthlyNet > 0 ? Math.max(1000, Math.round(digest.monthlyNet * 0.25 / 500) * 500) : 0;
 
   return [
-    "Spending breakdown",
-    `- You logged ${digest.transactions} expenses totaling ${formatCurrency(digest.totalSpent)}.`,
-    topCategory
-      ? `- Your highest spend category is ${topCategory[0]} at ${formatCurrency(topCategory[1])}.`
-      : "- Add more expenses to identify your top category.",
+    "Income and cash-flow snapshot",
+    `- You have logged income of ${formatCurrency(digest.totalIncome)} and expenses of ${formatCurrency(digest.totalSpent)} overall.`,
+    `- This month looks like ${formatCurrency(digest.monthlyIncome)} in income, ${formatCurrency(digest.monthlySpend)} in spend, and ${formatCurrency(digest.monthlyNet)} in net cash flow.`,
+    topIncome
+      ? `- Your strongest income source is ${topIncome.label} at ${formatCurrency(topIncome.total)}.`
+      : "- Add at least one income source to personalize savings and investment advice.",
     "",
-    "Bad habits",
-    discretionarySpend > digest.totalSpent * 0.4
-      ? "- Discretionary spending is quite high. Dining out, shopping, or entertainment may be eating into savings."
-      : "- Your spend looks fairly balanced, but watch repeat small purchases that quietly add up.",
+    "Spending pressure points",
+    topExpense
+      ? `- The largest expense category is ${topExpense.label} at ${formatCurrency(topExpense.total)}.`
+      : "- Add more expense entries to surface category patterns.",
+    digest.savingsRate >= 20
+      ? `- Your current monthly savings rate is about ${digest.savingsRate}%, which is healthy if it stays consistent.`
+      : `- Your current monthly savings rate is about ${digest.savingsRate}%, so tightening flexible spend would improve your buffer.`,
     "",
-    "Monthly savings potential",
-    `- If you trim just 20% from flexible categories, you could save around ${formatCurrency(savingsPotential)} per month.`,
-    "",
-    "Investment suggestions (FD, SIP)",
-    savingsPotential >= 5000
-      ? "- Keep 1-2 months of expenses in a high-yield savings account or FD, then start a SIP in a broad index mutual fund."
-      : "- Start with a small emergency fund in a short FD, then begin a modest SIP once your savings habit feels steady.",
+    "Personalized next moves",
+    `- A realistic short-term saving target is ${formatCurrency(Math.max(suggestedCut, digest.monthlyNet > 0 ? digest.monthlyNet * 0.2 : 1500))} per month.`,
+    sipSuggestion > 0
+      ? `- If your current cash flow stays stable, a SIP of around ${formatCurrency(sipSuggestion)} could be reasonable after keeping 1-2 months of expenses liquid.`
+      : "- Focus on stabilizing monthly surplus first, then start with a small SIP once your cash flow turns positive.",
+    "- Keep emergency money in a high-interest savings account or short FD before committing more to investing.",
   ].join("\n");
 }
 
@@ -78,40 +134,40 @@ function normalizeMessages(messages) {
     .slice(-12);
 }
 
-function buildExpenseContext(expenses) {
-  return JSON.stringify(buildExpenseDigest(expenses), null, 2);
+function buildFinanceContext(expenses, incomes) {
+  return JSON.stringify(buildFinanceDigest(expenses, incomes), null, 2);
 }
 
-function buildFallbackChatReply(messages, expenses) {
+function buildFallbackChatReply(messages, expenses, incomes) {
   const latestQuestion =
     [...normalizeMessages(messages)].reverse().find((message) => message.role === "user")?.content || "";
-  const summary = buildFallbackAnalysis(expenses);
+  const summary = buildFallbackAnalysis(expenses, incomes);
 
   return [
     latestQuestion
-      ? `Here is a practical answer based on your latest question: "${latestQuestion}".`
-      : "Here is a practical snapshot of your current money flow.",
+      ? `Here is a practical reply based on your latest question: "${latestQuestion}".`
+      : "Here is a practical snapshot of your current money system.",
     "",
     summary,
     "",
-    "Ask follow-up questions like:",
-    "- How can I reduce food spending without feeling restricted?",
-    "- What SIP amount looks realistic for my current budget?",
-    "- Build me a weekly spending limit for the rest of this month.",
+    "Useful follow-ups:",
+    "- What should my ideal monthly split be between spending, saving, and SIP?",
+    "- Which category should I cap first to improve cash flow?",
+    "- How much emergency fund should I build before investing more?",
   ].join("\n");
 }
 
-export async function generateAnalysis(expenses) {
-  if (!Array.isArray(expenses) || expenses.length === 0) {
+export async function generateAnalysis(expenses, incomes) {
+  if ((!Array.isArray(expenses) || expenses.length === 0) && (!Array.isArray(incomes) || incomes.length === 0)) {
     return {
-      analysis: "Add a few expenses first so MoneyMind AI can generate useful financial guidance.",
+      analysis: "Add income and expense entries first so MoneyMind AI can generate useful financial guidance.",
       source: "fallback",
     };
   }
 
   if (!groqClient) {
     return {
-      analysis: buildFallbackAnalysis(expenses),
+      analysis: buildFallbackAnalysis(expenses, incomes),
       source: "fallback",
     };
   }
@@ -119,7 +175,7 @@ export async function generateAnalysis(expenses) {
   try {
     const completion = await groqClient.chat.completions.create({
       model: env.GROQ_MODEL,
-      temperature: 0.4,
+      temperature: 0.35,
       messages: [
         {
           role: "system",
@@ -127,7 +183,7 @@ export async function generateAnalysis(expenses) {
         },
         {
           role: "user",
-          content: `Here are the user's expenses in JSON:\n${JSON.stringify(buildExpenseDigest(expenses), null, 2)}`,
+          content: `Here is the user's finance digest in JSON:\n${buildFinanceContext(expenses, incomes)}`,
         },
       ],
     });
@@ -136,7 +192,7 @@ export async function generateAnalysis(expenses) {
 
     if (!analysis) {
       return {
-        analysis: buildFallbackAnalysis(expenses),
+        analysis: buildFallbackAnalysis(expenses, incomes),
         source: "fallback",
       };
     }
@@ -147,17 +203,17 @@ export async function generateAnalysis(expenses) {
     };
   } catch {
     return {
-      analysis: buildFallbackAnalysis(expenses),
+      analysis: buildFallbackAnalysis(expenses, incomes),
       source: "fallback",
     };
   }
 }
 
-export async function generateFinanceChatReply(messages, expenses) {
-  if (!Array.isArray(expenses) || expenses.length === 0) {
+export async function generateFinanceChatReply(messages, expenses, incomes) {
+  if ((!Array.isArray(expenses) || expenses.length === 0) && (!Array.isArray(incomes) || incomes.length === 0)) {
     return {
       reply:
-        "Add a few expenses first, then ask me anything about budgeting, savings, or SIP and FD planning.",
+        "Add your income and expense entries first, then ask me anything about budgeting, savings, cash flow, SIP, or FD planning.",
       source: "fallback",
     };
   }
@@ -166,7 +222,7 @@ export async function generateFinanceChatReply(messages, expenses) {
 
   if (!groqClient) {
     return {
-      reply: buildFallbackChatReply(normalizedMessages, expenses),
+      reply: buildFallbackChatReply(normalizedMessages, expenses, incomes),
       source: "fallback",
     };
   }
@@ -174,15 +230,15 @@ export async function generateFinanceChatReply(messages, expenses) {
   try {
     const completion = await groqClient.chat.completions.create({
       model: env.GROQ_MODEL,
-      temperature: 0.4,
+      temperature: 0.35,
       messages: [
         {
           role: "system",
-          content: `${advisorPrompt}\nYou are now in an interactive chat. Answer follow-up questions using the current expense context, use INR, and keep the advice concrete and concise.`,
+          content: `${advisorPrompt}\nYou are in an interactive coaching chat. Give personalized, concrete answers using the current finance digest. Prefer actionable numbers and trade-offs over generic advice.`,
         },
         {
           role: "system",
-          content: `Current expense digest:\n${buildExpenseContext(expenses)}`,
+          content: `Current finance digest:\n${buildFinanceContext(expenses, incomes)}`,
         },
         ...normalizedMessages,
       ],
@@ -192,7 +248,7 @@ export async function generateFinanceChatReply(messages, expenses) {
 
     if (!reply) {
       return {
-        reply: buildFallbackChatReply(normalizedMessages, expenses),
+        reply: buildFallbackChatReply(normalizedMessages, expenses, incomes),
         source: "fallback",
       };
     }
@@ -203,7 +259,7 @@ export async function generateFinanceChatReply(messages, expenses) {
     };
   } catch {
     return {
-      reply: buildFallbackChatReply(normalizedMessages, expenses),
+      reply: buildFallbackChatReply(normalizedMessages, expenses, incomes),
       source: "fallback",
     };
   }

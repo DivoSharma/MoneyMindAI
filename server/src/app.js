@@ -4,6 +4,7 @@ import { env, getMissingServerEnv } from "./config.js";
 import { generateAnalysis, generateFinanceChatReply } from "./services/analysis-service.js";
 import { requireRequestContext } from "./services/auth-service.js";
 import { addExpense, listExpenses } from "./services/expense-service.js";
+import { addIncome, listIncomes } from "./services/income-service.js";
 
 const app = express();
 const api = express.Router();
@@ -57,10 +58,25 @@ api.post("/expenses", async (request, response) => {
   });
 });
 
+api.get("/incomes", async (request, response) => {
+  await withAuth(request, response, async (context) => {
+    const incomes = await listIncomes(context);
+    response.json({ incomes });
+  });
+});
+
+api.post("/incomes", async (request, response) => {
+  await withAuth(request, response, async (context) => {
+    const income = await addIncome(context, request.body || {});
+    response.status(201).json({ income });
+  });
+});
+
 api.post("/analyze", async (request, response) => {
   await withAuth(request, response, async (context) => {
     const expenses = await listExpenses(context);
-    const result = await generateAnalysis(expenses);
+    const incomes = await listIncomes(context);
+    const result = await generateAnalysis(expenses, incomes);
     response.json(result);
   });
 });
@@ -68,7 +84,8 @@ api.post("/analyze", async (request, response) => {
 api.post("/chat", async (request, response) => {
   await withAuth(request, response, async (context) => {
     const expenses = await listExpenses(context);
-    const result = await generateFinanceChatReply(request.body?.messages || [], expenses);
+    const incomes = await listIncomes(context);
+    const result = await generateFinanceChatReply(request.body?.messages || [], expenses, incomes);
     response.json(result);
   });
 });

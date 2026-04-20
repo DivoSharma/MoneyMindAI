@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import ActivityFeed from "./components/ActivityFeed";
 import AIInsights from "./components/AIInsights";
 import AuthPanel from "./components/AuthPanel";
 import Dashboard from "./components/Dashboard";
 import ExpenseForm from "./components/ExpenseForm";
-import ExpenseList from "./components/ExpenseList";
-import { analyzeExpenses, chatWithAdvisor, getExpenses } from "./lib/api";
+import IncomeForm from "./components/IncomeForm";
+import {
+  analyzeExpenses,
+  chatWithAdvisor,
+  getExpenses,
+  getIncomes,
+} from "./lib/api";
 import { supabase } from "./lib/supabase";
 
 function createMessage(role, content) {
@@ -20,6 +26,7 @@ function DashboardPage({
   aiSource,
   chatMessages,
   expenses,
+  incomes,
   isAnalyzing,
   isLoading,
   listError,
@@ -28,11 +35,11 @@ function DashboardPage({
   onSendMessage,
 }) {
   return (
-    <div className="page-grid">
+    <div className="page-grid dashboard-page-grid">
       <div className="page-main">
-        <Dashboard expenses={expenses} onRefresh={onRefresh} />
+        <Dashboard expenses={expenses} incomes={incomes} onRefresh={onRefresh} />
         <AIInsights
-          hasExpenses={expenses.length > 0}
+          hasFinanceData={expenses.length > 0 || incomes.length > 0}
           isAnalyzing={isAnalyzing}
           messages={chatMessages}
           onAnalyze={onAnalyze}
@@ -41,20 +48,32 @@ function DashboardPage({
         />
       </div>
       <div className="page-sidebar">
-        <ExpenseList error={listError} expenses={expenses} isLoading={isLoading} />
+        <ActivityFeed error={listError} expenses={expenses} incomes={incomes} isLoading={isLoading} />
       </div>
     </div>
   );
 }
 
-function AddExpensePage({ expenses, isLoading, listError, onExpenseCreated }) {
+function TrackerPage({ expenses, incomes, isLoading, listError, onExpenseCreated, onIncomeCreated }) {
   return (
-    <div className="page-grid">
+    <div className="page-grid tracker-grid">
       <div className="page-main">
-        <ExpenseForm onExpenseCreated={onExpenseCreated} />
+        <section className="card planner-card">
+          <div className="card-header">
+            <span className="eyebrow">Cashflow Tracker</span>
+            <h2>Manage both sides of your money system</h2>
+            <p>Track income and spending together to understand net cash flow, savings power, and investable surplus.</p>
+          </div>
+
+          <div className="forms-grid">
+            <ExpenseForm onExpenseCreated={onExpenseCreated} />
+            <IncomeForm onIncomeCreated={onIncomeCreated} />
+          </div>
+        </section>
       </div>
+
       <div className="page-sidebar">
-        <ExpenseList error={listError} expenses={expenses} isLoading={isLoading} />
+        <ActivityFeed error={listError} expenses={expenses} incomes={incomes} isLoading={isLoading} />
       </div>
     </div>
   );
@@ -66,25 +85,24 @@ function AuthExperience() {
       <section className="hero-card auth-hero">
         <div>
           <span className="eyebrow">MoneyMind AI</span>
-          <h1>Your personal money cockpit, now private to you</h1>
+          <h1>A glassy finance workspace for income, spending, and smarter decisions.</h1>
           <p>
-            Track every expense, see your biggest categories, and get AI-backed savings and
-            investment suggestions without sharing a demo account.
+            Track how money comes in, where it goes, and what you should do next with personalized guidance built around your own numbers.
           </p>
         </div>
 
         <div className="feature-list">
           <div className="feature-item">
-            <strong>Private by default</strong>
-            <span>Supabase auth and row-level security keep each expense tied to its owner.</span>
+            <strong>Full cash-flow view</strong>
+            <span>Capture both income and expenses so the dashboard reflects your real financial system.</span>
           </div>
           <div className="feature-item">
-            <strong>Actionable insights</strong>
-            <span>Use Groq-powered analysis to spot habits, savings potential, and SIP ideas.</span>
+            <strong>Personalized AI finance chat</strong>
+            <span>Ask about spending leaks, SIP affordability, budget caps, and next-month planning.</span>
           </div>
           <div className="feature-item">
-            <strong>Fast daily logging</strong>
-            <span>Add cash, card, and UPI expenses in a clean two-screen workflow.</span>
+            <strong>Professional daily tracking</strong>
+            <span>Use one calm workspace for salary, bills, shopping, and long-term savings decisions.</span>
           </div>
         </div>
       </section>
@@ -99,6 +117,7 @@ export default function App() {
   const [userEmail, setUserEmail] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [expenses, setExpenses] = useState([]);
+  const [incomes, setIncomes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [listError, setListError] = useState("");
   const [chatMessages, setChatMessages] = useState([]);
@@ -139,6 +158,7 @@ export default function App() {
 
       if (!nextSession) {
         setExpenses([]);
+        setIncomes([]);
       }
     });
 
@@ -148,34 +168,35 @@ export default function App() {
     };
   }, []);
 
+  async function loadFinanceData() {
+    setIsLoading(true);
+    setListError("");
+
+    try {
+      const [expenseData, incomeData] = await Promise.all([getExpenses(), getIncomes()]);
+      setExpenses(expenseData.expenses || []);
+      setIncomes(incomeData.incomes || []);
+    } catch (error) {
+      setListError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!session) {
       return;
     }
 
-    async function loadExpenses() {
-      setIsLoading(true);
-      setListError("");
-
-      try {
-        const data = await getExpenses();
-        setExpenses(data.expenses || []);
-      } catch (error) {
-        setListError(error.message);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    void loadExpenses();
+    void loadFinanceData();
   }, [session]);
 
   async function handleAnalyze() {
-    if (expenses.length === 0) {
+    if (expenses.length === 0 && incomes.length === 0) {
       setChatMessages([
         createMessage(
           "assistant",
-          "Add a few expenses first so MoneyMind AI has enough context to review your finances."
+          "Add your income and expense entries first so MoneyMind AI can review your cash flow properly."
         ),
       ]);
       setAiSource("fallback");
@@ -186,7 +207,7 @@ export default function App() {
 
     try {
       const data = await analyzeExpenses();
-      setChatMessages([createMessage("assistant", data.analysis || "I reviewed your recent spending.")]);
+      setChatMessages([createMessage("assistant", data.analysis || "I reviewed your recent finances.")]);
       setAiSource(data.source || "");
     } catch (error) {
       setChatMessages([createMessage("assistant", error.message)]);
@@ -230,22 +251,14 @@ export default function App() {
     }
   }
 
-  async function handleRefresh() {
-    setIsLoading(true);
-    setListError("");
-
-    try {
-      const data = await getExpenses();
-      setExpenses(data.expenses || []);
-    } catch (error) {
-      setListError(error.message);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
   function handleExpenseCreated(expense) {
     setExpenses((current) => [expense, ...current]);
+    setChatMessages([]);
+    setAiSource("");
+  }
+
+  function handleIncomeCreated(income) {
+    setIncomes((current) => [income, ...current]);
     setChatMessages([]);
     setAiSource("");
   }
@@ -254,6 +267,7 @@ export default function App() {
     setChatMessages([]);
     setAiSource("");
     setExpenses([]);
+    setIncomes([]);
     setListError("");
     await supabase.auth.signOut();
   }
@@ -269,8 +283,8 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
-          <span className="eyebrow">AI-powered personal finance assistant</span>
+        <div className="brand-block">
+          <span className="eyebrow">AI-powered personal finance workspace</span>
           <h1>MoneyMind AI</h1>
         </div>
 
@@ -282,9 +296,9 @@ export default function App() {
             </NavLink>
             <NavLink
               className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}
-              to="/add-expense"
+              to="/tracker"
             >
-              Add Expense
+              Tracker
             </NavLink>
           </nav>
           <button className="button button-ghost" onClick={handleSignOut} type="button">
@@ -300,11 +314,12 @@ export default function App() {
               aiSource={aiSource}
               chatMessages={chatMessages}
               expenses={expenses}
+              incomes={incomes}
               isAnalyzing={isAnalyzing}
               isLoading={isLoading}
               listError={listError}
               onAnalyze={handleAnalyze}
-              onRefresh={handleRefresh}
+              onRefresh={loadFinanceData}
               onSendMessage={handleSendMessage}
             />
           }
@@ -312,17 +327,22 @@ export default function App() {
         />
         <Route
           element={
-            <AddExpensePage
+            <TrackerPage
               expenses={expenses}
+              incomes={incomes}
               isLoading={isLoading}
               listError={listError}
               onExpenseCreated={handleExpenseCreated}
+              onIncomeCreated={handleIncomeCreated}
             />
           }
+          path="/tracker"
+        />
+        <Route
+          element={<Navigate replace to="/tracker" />}
           path="/add-expense"
         />
       </Routes>
     </div>
   );
 }
-

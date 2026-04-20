@@ -16,11 +16,24 @@ create table if not exists public.expenses (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.incomes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  amount numeric(12, 2) not null check (amount > 0),
+  source text not null,
+  date date not null,
+  note text,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
 create index if not exists idx_expenses_user_id on public.expenses(user_id);
 create index if not exists idx_expenses_date on public.expenses(date desc);
+create index if not exists idx_incomes_user_id on public.incomes(user_id);
+create index if not exists idx_incomes_date on public.incomes(date desc);
 
 alter table public.users enable row level security;
 alter table public.expenses enable row level security;
+alter table public.incomes enable row level security;
 
 drop policy if exists "Users can read own profile" on public.users;
 create policy "Users can read own profile"
@@ -75,6 +88,35 @@ create policy "Users can update own expenses"
 drop policy if exists "Users can delete own expenses" on public.expenses;
 create policy "Users can delete own expenses"
   on public.expenses
+  for delete
+  to authenticated
+  using (user_id = auth.uid());
+
+drop policy if exists "Users can read own incomes" on public.incomes;
+create policy "Users can read own incomes"
+  on public.incomes
+  for select
+  to authenticated
+  using (user_id = auth.uid());
+
+drop policy if exists "Users can insert own incomes" on public.incomes;
+create policy "Users can insert own incomes"
+  on public.incomes
+  for insert
+  to authenticated
+  with check (user_id = auth.uid());
+
+drop policy if exists "Users can update own incomes" on public.incomes;
+create policy "Users can update own incomes"
+  on public.incomes
+  for update
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+drop policy if exists "Users can delete own incomes" on public.incomes;
+create policy "Users can delete own incomes"
+  on public.incomes
   for delete
   to authenticated
   using (user_id = auth.uid());

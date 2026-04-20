@@ -1,12 +1,20 @@
 import { useState } from "react";
 
 const promptSuggestions = [
-  "How do I reduce shopping spend next month?",
-  "Can I afford a SIP right now?",
-  "Give me a weekly budget plan.",
+  "Can I comfortably start a SIP this month?",
+  "Which category should I reduce first?",
+  "Build me a realistic monthly spending cap.",
+  "How much emergency fund should I target?",
 ];
 
-export default function AIInsights({ hasExpenses, isAnalyzing, messages, onAnalyze, onSendMessage, source }) {
+export default function AIInsights({
+  hasFinanceData,
+  isAnalyzing,
+  messages,
+  onAnalyze,
+  onSendMessage,
+  source,
+}) {
   const [draft, setDraft] = useState("");
 
   async function handleSubmit(event) {
@@ -22,12 +30,12 @@ export default function AIInsights({ hasExpenses, isAnalyzing, messages, onAnaly
   }
 
   return (
-    <section className="card insights-card">
+    <section className="card copilot-card">
       <div className="card-header card-header-inline">
         <div>
           <span className="eyebrow">AI Copilot</span>
-          <h2>Chat about your money</h2>
-          <p>Ask smarter follow-up questions about habits, savings targets, budgets, and investing.</p>
+          <h2>Your personal finance strategist</h2>
+          <p>Ask better questions about cash flow, savings rate, spending pressure, SIP planning, and budgeting decisions.</p>
         </div>
 
         <button className="button button-primary" disabled={isAnalyzing} onClick={onAnalyze} type="button">
@@ -55,16 +63,16 @@ export default function AIInsights({ hasExpenses, isAnalyzing, messages, onAnaly
             {isAnalyzing ? (
               <article className="chat-message assistant-message">
                 <span className="chat-role">MoneyMind AI</span>
-                <div className="chat-bubble-content">Thinking through your finances...</div>
+                <div className="chat-bubble-content">Thinking through your income, expenses, and next best move...</div>
               </article>
             ) : null}
           </div>
         </div>
       ) : (
         <div className="empty-state">
-          {hasExpenses
-            ? "Start an AI review to get a personalized summary, then keep chatting about budgets, savings, and investment ideas."
-            : "Add a few expenses first, then start your AI finance chat."}
+          {hasFinanceData
+            ? "Start with an AI review, then ask detailed follow-up questions about your budget, savings goals, and investing decisions."
+            : "Add income and expense entries first, then start your AI finance conversation."}
         </div>
       )}
 
@@ -72,7 +80,7 @@ export default function AIInsights({ hasExpenses, isAnalyzing, messages, onAnaly
         {promptSuggestions.map((prompt) => (
           <button
             className="prompt-chip"
-            disabled={isAnalyzing || !hasExpenses}
+            disabled={isAnalyzing || !hasFinanceData}
             key={prompt}
             onClick={() => onSendMessage(prompt)}
             type="button"
@@ -86,19 +94,19 @@ export default function AIInsights({ hasExpenses, isAnalyzing, messages, onAnaly
         <label className="chat-input-wrap">
           <span className="sr-only">Ask MoneyMind AI a finance question</span>
           <textarea
-            disabled={isAnalyzing || !hasExpenses}
+            disabled={isAnalyzing || !hasFinanceData}
             onChange={(event) => setDraft(event.target.value)}
             placeholder={
-              hasExpenses
-                ? "Ask about your budget, savings target, SIP amount, or a specific category..."
-                : "Add some expenses to unlock AI chat..."
+              hasFinanceData
+                ? "Ask about budget caps, savings targets, SIP affordability, emergency funds, or category decisions..."
+                : "Add income and expenses to unlock personalized AI guidance..."
             }
             rows="3"
             value={draft}
           />
         </label>
 
-        <button className="button button-secondary" disabled={isAnalyzing || !hasExpenses || !draft.trim()} type="submit">
+        <button className="button button-secondary" disabled={isAnalyzing || !hasFinanceData || !draft.trim()} type="submit">
           Send Message
         </button>
       </form>

@@ -49,6 +49,17 @@ export function createExpense(payload) {
   });
 }
 
+export function getIncomes() {
+  return request("/incomes");
+}
+
+export function createIncome(payload) {
+  return request("/incomes", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function analyzeExpenses() {
   return request("/analyze", {
     method: "POST",

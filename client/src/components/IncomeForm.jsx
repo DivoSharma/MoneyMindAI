@@ -1,27 +1,25 @@
 import { useState } from "react";
-import { createExpense } from "../lib/api";
+import { createIncome } from "../lib/api";
 
-const categories = [
-  "Food",
-  "Transport",
-  "Shopping",
-  "Bills",
-  "Rent",
-  "Entertainment",
-  "Health",
-  "Travel",
-  "Education",
+const incomeSources = [
+  "Salary",
+  "Freelance",
+  "Business",
+  "Bonus",
+  "Interest",
+  "Refund",
+  "Gift",
   "Other",
 ];
 
 const initialState = {
   amount: "",
-  category: "Food",
+  source: "Salary",
   date: new Date().toISOString().slice(0, 10),
   note: "",
 };
 
-export default function ExpenseForm({ onExpenseCreated }) {
+export default function IncomeForm({ onIncomeCreated }) {
   const [formData, setFormData] = useState(initialState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -37,8 +35,8 @@ export default function ExpenseForm({ onExpenseCreated }) {
         amount: Number(formData.amount),
       };
 
-      const data = await createExpense(payload);
-      onExpenseCreated(data.expense);
+      const data = await createIncome(payload);
+      onIncomeCreated(data.income);
       setFormData({
         ...initialState,
         date: new Date().toISOString().slice(0, 10),
@@ -59,13 +57,11 @@ export default function ExpenseForm({ onExpenseCreated }) {
   }
 
   return (
-    <section className="card form-card expense-card">
+    <section className="card form-card income-card">
       <div className="card-header">
-        <span className="eyebrow">Log Expense</span>
-        <h2>Capture every outgoing rupee</h2>
-        <p>
-          Record recurring bills, daily spending, and one-off purchases so your cash-flow picture stays current.
-        </p>
+        <span className="eyebrow">Log Income</span>
+        <h2>Track what is coming in</h2>
+        <p>Add salary, freelance work, refunds, and other cash inflows for better net-cash analysis.</p>
       </div>
 
       <form className="expense-form" onSubmit={handleSubmit}>
@@ -75,7 +71,7 @@ export default function ExpenseForm({ onExpenseCreated }) {
             min="0"
             name="amount"
             onChange={handleChange}
-            placeholder="2500"
+            placeholder="45000"
             required
             step="0.01"
             type="number"
@@ -84,11 +80,11 @@ export default function ExpenseForm({ onExpenseCreated }) {
         </label>
 
         <label>
-          Category
-          <select name="category" onChange={handleChange} value={formData.category}>
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
+          Source
+          <select name="source" onChange={handleChange} value={formData.source}>
+            {incomeSources.map((source) => (
+              <option key={source} value={source}>
+                {source}
               </option>
             ))}
           </select>
@@ -104,7 +100,7 @@ export default function ExpenseForm({ onExpenseCreated }) {
           <textarea
             name="note"
             onChange={handleChange}
-            placeholder="Dinner with friends, petrol refill, SIP top-up..."
+            placeholder="April salary credit, client retainer, annual bonus..."
             rows="4"
             value={formData.note}
           />
@@ -113,7 +109,7 @@ export default function ExpenseForm({ onExpenseCreated }) {
         {error ? <p className="form-error">{error}</p> : null}
 
         <button className="button button-primary" disabled={isSubmitting} type="submit">
-          {isSubmitting ? "Saving..." : "Save Expense"}
+          {isSubmitting ? "Saving..." : "Save Income"}
         </button>
       </form>
     </section>
