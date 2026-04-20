@@ -1,18 +1,20 @@
-import { useEffect, useState } from "react";
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
-import ActivityFeed from "./components/ActivityFeed";
-import AIInsights from "./components/AIInsights";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import AuthPanel from "./components/AuthPanel";
-import Dashboard from "./components/Dashboard";
-import ExpenseForm from "./components/ExpenseForm";
-import IncomeForm from "./components/IncomeForm";
 import {
   analyzeExpenses,
   chatWithAdvisor,
   getExpenses,
   getIncomes,
 } from "./lib/api";
+import { getFinanceSnapshot, getToastSuggestions } from "./lib/finance";
 import { supabase } from "./lib/supabase";
+
+const ActivityFeed = lazy(() => import("./components/ActivityFeed"));
+const AIInsights = lazy(() => import("./components/AIInsights"));
+const Dashboard = lazy(() => import("./components/Dashboard"));
+const SuggestionToasts = lazy(() => import("./components/SuggestionToasts"));
+const TrackerWorkspace = lazy(() => import("./components/TrackerWorkspace"));
 
 function createMessage(role, content) {
   return {
@@ -22,23 +24,82 @@ function createMessage(role, content) {
   };
 }
 
-function DashboardPage({
+function DashboardPage({ expenses, incomes, isLoading, listError, onRefresh, onAskAboutEntry }) {
+  return (
+    <div className="page-grid">
+      <div className="page-main page-scroll">
+        <Suspense fallback={<div className="panel-loading">Loading dashboard...</div>}>
+          <Dashboard expenses={expenses} incomes={incomes} onRefresh={onRefresh} />
+        </Suspense>
+      </div>
+
+      <div className="page-sidebar">
+        <Suspense fallback={<div className="panel-loading">Loading activity...</div>}>
+          <ActivityFeed
+            error={listError}
+            expenses={expenses}
+            incomes={incomes}
+            isLoading={isLoading}
+            onAskAboutEntry={onAskAboutEntry}
+          />
+        </Suspense>
+      </div>
+    </div>
+  );
+}
+
+function TrackerPage({
+  expenses,
+  incomes,
+  isLoading,
+  listError,
+  onAskAboutEntry,
+  onExpenseCreated,
+  onIncomeCreated,
+}) {
+  return (
+    <div className="page-grid">
+      <div className="page-main page-scroll">
+        <Suspense fallback={<div className="panel-loading">Loading tracker...</div>}>
+          <TrackerWorkspace
+            expenses={expenses}
+            incomes={incomes}
+            onAskAboutEntry={onAskAboutEntry}
+            onExpenseCreated={onExpenseCreated}
+            onIncomeCreated={onIncomeCreated}
+          />
+        </Suspense>
+      </div>
+
+      <div className="page-sidebar">
+        <Suspense fallback={<div className="panel-loading">Loading activity...</div>}>
+          <ActivityFeed
+            error={listError}
+            expenses={expenses}
+            incomes={incomes}
+            isLoading={isLoading}
+            onAskAboutEntry={onAskAboutEntry}
+          />
+        </Suspense>
+      </div>
+    </div>
+  );
+}
+
+function AnalysisPage({
   aiSource,
   chatMessages,
   expenses,
   incomes,
   isAnalyzing,
-  isLoading,
-  listError,
   onAnalyze,
-  onRefresh,
   onSendMessage,
 }) {
   return (
-    <div className="page-grid dashboard-page-grid">
-      <div className="page-main">
-        <Dashboard expenses={expenses} incomes={incomes} onRefresh={onRefresh} />
+    <div className="page-single page-scroll">
+      <Suspense fallback={<div className="panel-loading">Loading AI analysis...</div>}>
         <AIInsights
+          financeSnapshot={getFinanceSnapshot(expenses, incomes)}
           hasFinanceData={expenses.length > 0 || incomes.length > 0}
           isAnalyzing={isAnalyzing}
           messages={chatMessages}
@@ -46,35 +107,7 @@ function DashboardPage({
           onSendMessage={onSendMessage}
           source={aiSource}
         />
-      </div>
-      <div className="page-sidebar">
-        <ActivityFeed error={listError} expenses={expenses} incomes={incomes} isLoading={isLoading} />
-      </div>
-    </div>
-  );
-}
-
-function TrackerPage({ expenses, incomes, isLoading, listError, onExpenseCreated, onIncomeCreated }) {
-  return (
-    <div className="page-grid tracker-grid">
-      <div className="page-main">
-        <section className="card planner-card">
-          <div className="card-header">
-            <span className="eyebrow">Cashflow Tracker</span>
-            <h2>Manage both sides of your money system</h2>
-            <p>Track income and spending together to understand net cash flow, savings power, and investable surplus.</p>
-          </div>
-
-          <div className="forms-grid">
-            <ExpenseForm onExpenseCreated={onExpenseCreated} />
-            <IncomeForm onIncomeCreated={onIncomeCreated} />
-          </div>
-        </section>
-      </div>
-
-      <div className="page-sidebar">
-        <ActivityFeed error={listError} expenses={expenses} incomes={incomes} isLoading={isLoading} />
-      </div>
+      </Suspense>
     </div>
   );
 }
@@ -85,24 +118,25 @@ function AuthExperience() {
       <section className="hero-card auth-hero">
         <div>
           <span className="eyebrow">MoneyMind AI</span>
-          <h1>A glassy finance workspace for income, spending, and smarter decisions.</h1>
+          <h1>A private finance workspace with live cash-flow visibility and an AI copilot.</h1>
           <p>
-            Track how money comes in, where it goes, and what you should do next with personalized guidance built around your own numbers.
+            Track income, capture expenses, monitor your trends, and ask grounded questions about budgeting, FD, SIP,
+            and savings decisions.
           </p>
         </div>
 
         <div className="feature-list">
           <div className="feature-item">
-            <strong>Full cash-flow view</strong>
-            <span>Capture both income and expenses so the dashboard reflects your real financial system.</span>
+            <strong>Professional dashboard</strong>
+            <span>Monitor trends, breakdowns, and net cash flow in one glass-style workspace.</span>
           </div>
           <div className="feature-item">
-            <strong>Personalized AI finance chat</strong>
-            <span>Ask about spending leaks, SIP affordability, budget caps, and next-month planning.</span>
+            <strong>Tracker with context</strong>
+            <span>Capture income and spending without losing sight of your monthly position.</span>
           </div>
           <div className="feature-item">
-            <strong>Professional daily tracking</strong>
-            <span>Use one calm workspace for salary, bills, shopping, and long-term savings decisions.</span>
+            <strong>AI finance analysis</strong>
+            <span>Chat naturally about overspending, savings targets, emergency funds, and SIP readiness.</span>
           </div>
         </div>
       </section>
@@ -113,6 +147,8 @@ function AuthExperience() {
 }
 
 export default function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [session, setSession] = useState(null);
   const [userEmail, setUserEmail] = useState("");
   const [authReady, setAuthReady] = useState(false);
@@ -123,6 +159,7 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState([]);
   const [aiSource, setAiSource] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [queuedPrompt, setQueuedPrompt] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -251,16 +288,31 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+    if (!queuedPrompt || !session || isAnalyzing) {
+      return;
+    }
+
+    const prompt = queuedPrompt;
+    setQueuedPrompt("");
+    void handleSendMessage(prompt);
+  }, [queuedPrompt, session, isAnalyzing]);
+
+  function openAnalysisWithPrompt(prompt) {
+    if (!prompt) {
+      return;
+    }
+
+    navigate("/analysis");
+    setQueuedPrompt(prompt);
+  }
+
   function handleExpenseCreated(expense) {
     setExpenses((current) => [expense, ...current]);
-    setChatMessages([]);
-    setAiSource("");
   }
 
   function handleIncomeCreated(income) {
     setIncomes((current) => [income, ...current]);
-    setChatMessages([]);
-    setAiSource("");
   }
 
   async function handleSignOut() {
@@ -280,69 +332,86 @@ export default function App() {
     return <AuthExperience />;
   }
 
+  const financeSnapshot = getFinanceSnapshot(expenses, incomes);
+  const toastSuggestions = getToastSuggestions(financeSnapshot, location.pathname);
+
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="brand-block">
-          <span className="eyebrow">AI-powered personal finance workspace</span>
+          <span className="eyebrow">Personal finance workspace</span>
           <h1>MoneyMind AI</h1>
         </div>
 
         <div className="topbar-actions">
-          <span className="user-chip">{userEmail}</span>
           <nav className="nav-tabs">
             <NavLink className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")} to="/">
               Dashboard
             </NavLink>
-            <NavLink
-              className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}
-              to="/tracker"
-            >
+            <NavLink className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")} to="/tracker">
               Tracker
             </NavLink>
+            <NavLink className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")} to="/analysis">
+              AI Analysis
+            </NavLink>
           </nav>
+          <span className="user-chip">{userEmail}</span>
           <button className="button button-ghost" onClick={handleSignOut} type="button">
             Sign Out
           </button>
         </div>
       </header>
 
-      <Routes>
-        <Route
-          element={
-            <DashboardPage
-              aiSource={aiSource}
-              chatMessages={chatMessages}
-              expenses={expenses}
-              incomes={incomes}
-              isAnalyzing={isAnalyzing}
-              isLoading={isLoading}
-              listError={listError}
-              onAnalyze={handleAnalyze}
-              onRefresh={loadFinanceData}
-              onSendMessage={handleSendMessage}
-            />
-          }
-          path="/"
-        />
-        <Route
-          element={
-            <TrackerPage
-              expenses={expenses}
-              incomes={incomes}
-              isLoading={isLoading}
-              listError={listError}
-              onExpenseCreated={handleExpenseCreated}
-              onIncomeCreated={handleIncomeCreated}
-            />
-          }
-          path="/tracker"
-        />
-        <Route
-          element={<Navigate replace to="/tracker" />}
-          path="/add-expense"
-        />
-      </Routes>
+      <main className="workspace-shell">
+        <Routes>
+          <Route
+            element={
+              <DashboardPage
+                expenses={expenses}
+                incomes={incomes}
+                isLoading={isLoading}
+                listError={listError}
+                onAskAboutEntry={openAnalysisWithPrompt}
+                onRefresh={loadFinanceData}
+              />
+            }
+            path="/"
+          />
+          <Route
+            element={
+              <TrackerPage
+                expenses={expenses}
+                incomes={incomes}
+                isLoading={isLoading}
+                listError={listError}
+                onAskAboutEntry={openAnalysisWithPrompt}
+                onExpenseCreated={handleExpenseCreated}
+                onIncomeCreated={handleIncomeCreated}
+              />
+            }
+            path="/tracker"
+          />
+          <Route
+            element={
+              <AnalysisPage
+                aiSource={aiSource}
+                chatMessages={chatMessages}
+                expenses={expenses}
+                incomes={incomes}
+                isAnalyzing={isAnalyzing}
+                onAnalyze={handleAnalyze}
+                onSendMessage={handleSendMessage}
+              />
+            }
+            path="/analysis"
+          />
+          <Route element={<Navigate replace to="/tracker" />} path="/add-expense" />
+        </Routes>
+      </main>
+
+      <Suspense fallback={null}>
+        <SuggestionToasts onOpenSuggestion={openAnalysisWithPrompt} suggestions={toastSuggestions} />
+      </Suspense>
     </div>
   );
 }

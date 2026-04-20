@@ -21,10 +21,11 @@ const initialState = {
   note: "",
 };
 
-export default function ExpenseForm({ onExpenseCreated }) {
+export default function ExpenseForm({ onExpenseCreated, embedded = false }) {
   const [formData, setFormData] = useState(initialState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const Wrapper = embedded ? "div" : "section";
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -59,7 +60,7 @@ export default function ExpenseForm({ onExpenseCreated }) {
   }
 
   return (
-    <section className="card form-card expense-card">
+    <Wrapper className={embedded ? "form-surface expense-form-surface" : "card form-card expense-card"}>
       <div className="card-header">
         <span className="eyebrow">Log Expense</span>
         <h2>Capture every outgoing rupee</h2>
@@ -102,6 +103,7 @@ export default function ExpenseForm({ onExpenseCreated }) {
         <label>
           Note
           <textarea
+            maxLength="240"
             name="note"
             onChange={handleChange}
             placeholder="Dinner with friends, petrol refill, SIP top-up..."
@@ -116,6 +118,6 @@ export default function ExpenseForm({ onExpenseCreated }) {
           {isSubmitting ? "Saving..." : "Save Expense"}
         </button>
       </form>
-    </section>
+    </Wrapper>
   );
 }

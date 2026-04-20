@@ -1,20 +1,5 @@
 import { ensureUserProfile } from "./expense-service.js";
-
-function buildValidationError(message) {
-  const error = new Error(message);
-  error.statusCode = 400;
-  return error;
-}
-
-function normalizeDate(value) {
-  const normalized = String(value || "").trim();
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    throw buildValidationError("Date must be in YYYY-MM-DD format.");
-  }
-
-  return normalized;
-}
+import { normalizeAmount, normalizeDate, normalizeText } from "../lib/validation.js";
 
 export async function listIncomes(context) {
   const user = await ensureUserProfile(context);
@@ -34,18 +19,17 @@ export async function listIncomes(context) {
 }
 
 export async function addIncome(context, payload) {
-  const amount = Number(payload.amount);
-  const source = String(payload.source || "").trim();
+  const amount = normalizeAmount(payload.amount);
+  const source = normalizeText(payload.source, {
+    allowEmpty: false,
+    field: "Income source",
+    maxLength: 60,
+  });
   const date = normalizeDate(payload.date);
-  const note = String(payload.note || "").trim();
-
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw buildValidationError("Amount must be a positive number.");
-  }
-
-  if (!source) {
-    throw buildValidationError("Income source is required.");
-  }
+  const note = normalizeText(payload.note, {
+    field: "Note",
+    maxLength: 240,
+  });
 
   const user = await ensureUserProfile(context);
 

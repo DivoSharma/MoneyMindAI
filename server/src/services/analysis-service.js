@@ -1,5 +1,6 @@
 import { env } from "../config.js";
 import { groqClient } from "../lib/groq.js";
+import { normalizeMessages } from "../lib/validation.js";
 
 const advisorPrompt = `
 You are MoneyMind AI, a personal finance strategist for a young Indian professional.
@@ -117,21 +118,6 @@ function buildFallbackAnalysis(expenses, incomes) {
       : "- Focus on stabilizing monthly surplus first, then start with a small SIP once your cash flow turns positive.",
     "- Keep emergency money in a high-interest savings account or short FD before committing more to investing.",
   ].join("\n");
-}
-
-function normalizeMessages(messages) {
-  if (!Array.isArray(messages)) {
-    return [];
-  }
-
-  return messages
-    .filter((message) => ["user", "assistant"].includes(message?.role))
-    .map((message) => ({
-      role: message.role,
-      content: String(message.content || "").trim(),
-    }))
-    .filter((message) => message.content)
-    .slice(-12);
 }
 
 function buildFinanceContext(expenses, incomes) {

@@ -19,10 +19,11 @@ const initialState = {
   note: "",
 };
 
-export default function IncomeForm({ onIncomeCreated }) {
+export default function IncomeForm({ onIncomeCreated, embedded = false }) {
   const [formData, setFormData] = useState(initialState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const Wrapper = embedded ? "div" : "section";
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -57,7 +58,7 @@ export default function IncomeForm({ onIncomeCreated }) {
   }
 
   return (
-    <section className="card form-card income-card">
+    <Wrapper className={embedded ? "form-surface income-form-surface" : "card form-card income-card"}>
       <div className="card-header">
         <span className="eyebrow">Log Income</span>
         <h2>Track what is coming in</h2>
@@ -98,6 +99,7 @@ export default function IncomeForm({ onIncomeCreated }) {
         <label>
           Note
           <textarea
+            maxLength="240"
             name="note"
             onChange={handleChange}
             placeholder="April salary credit, client retainer, annual bonus..."
@@ -112,6 +114,6 @@ export default function IncomeForm({ onIncomeCreated }) {
           {isSubmitting ? "Saving..." : "Save Income"}
         </button>
       </form>
-    </section>
+    </Wrapper>
   );
 }
